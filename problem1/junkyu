@@ -1,0 +1,130 @@
+bool firstCall = true;
+bool firstTest = true;
+int firstArray[5040][4];
+int secondArray[5040][4];
+int thirdArray[5040][4];
+int(*que1)[4];
+int(*que2)[4];
+int numbers[10];
+
+void __makeCandidate(void)
+{
+	int index = 0;
+	bool used[10] = { false, };
+
+	for (int i = 0; i < 10; i++) {
+		used[i] = true;
+		for (int j = 0; j < 10; j++) {
+			if (used[j]) continue;
+			used[j] = true;
+			for (int k = 0; k < 10; k++) {
+				if (used[k]) continue;
+				used[k] = true;
+				for (int m = 0; m < 10; m++) {
+					if (used[m]) continue;
+					firstArray[index][0] = i;
+					firstArray[index][1] = j;
+					firstArray[index][2] = k;
+					firstArray[index][3] = m;
+
+					index++;
+				}
+				used[k] = false;
+			}
+			used[j] = false;
+		}
+		used[i] = false;
+	}
+}
+
+static bool __checkNumbers(int suppose[], int compare[], Data compareResult)
+{
+	Data result;
+
+	result.strike = 0;
+	result.ball = 0;
+
+
+	for (int idx = 0; idx < 4; idx++)
+	{
+		if (compare[idx] == suppose[idx])
+			result.strike++;
+		else if (numbers[suppose[idx]] > 0)
+			result.ball++;
+	}
+
+	if (result.strike == compareResult.strike
+		&& result.ball == compareResult.ball)
+		return true;
+	else
+		return false;
+}
+
+static void numbersCheck(int standard[])
+{
+	for (int i = 0; i < 10; i++)
+		numbers[i] = 0;
+
+	for (int j = 0; j < 4; j++)
+		numbers[standard[j]]++;
+}
+
+static int __findSameScore(int compare[], Data result, int remain)
+{
+	int index = 0;
+	bool isSame = false;
+
+	numbersCheck(compare);
+
+	for (int i = 0; i < remain; i++) {
+		isSame = __checkNumbers(firstCall ? firstArray[i] : que1[i], compare, result);
+
+		if (isSame == true) {
+			for (int j = 0; j < 4; j++) {
+				if (firstCall)
+					que2[index][j] = firstArray[i][j];
+				else
+					que2[index][j] = que1[i][j];
+			}
+			index++;
+		}
+	}
+
+	return index;
+}
+
+int arr[200];
+
+void tryBest(int suppose[])
+{
+	Data result;
+	int remain = 5040;
+	int(*temp)[4];
+
+	firstCall = true;
+
+	if (firstTest == true) {
+		__makeCandidate();
+		firstTest = false;
+	}
+
+	que1 = secondArray;
+	que2 = thirdArray;
+
+	while (remain != 1) {
+		result = query(firstCall ? firstArray[0] : que1[0]);
+		if (result.strike == 4)
+			break;
+
+		remain = __findSameScore(firstCall ? firstArray[0] : que1[0], result, remain);
+
+		temp = que1;
+		que1 = que2;
+		que2 = temp;
+
+		firstCall = false;
+	}
+
+	for (int i = 0; i < 4; i++)
+		suppose[i] = que1[0][i];
+}
