@@ -90,31 +90,68 @@ public:
 static Furniture furnitures[10000];
 static int craftsman_count = 0;
 static int currentTime = 0;
-static int craftman[31];
+static int craftman[32];
 static int restman = 0;
 
-bool work_comp(int& a, int& b) {
-	return a < b;
-}
-
+#define STOCK_WEIGHT(fid) ((furnitures[fid].price * 1000) / furnitures[fid].makingTime)
 bool stock_comp(int& a, int& b) {
-	Furniture fa = furnitures[a];
-	Furniture fb = furnitures[b];
-
-	int va = fa.price / fa.makingTime;
-	int vb = fb.price / fb.makingTime;
-	return va > vb;
+	return STOCK_WEIGHT(a) > STOCK_WEIGHT(b);
 }
 
-static PriorityQue<int, work_comp, 31> working;
 static PriorityQue<int, stock_comp, 10000> stock;
 
-static int COUNT = 0;
+static int pcraftman[32];
+
+bool pwork_comp(int& a, int& b) {
+	int ma = pcraftman[a];
+	int mb = pcraftman[b];
+
+	Furniture *fa = &furnitures[craftman[ma]];
+	Furniture *fb = &furnitures[craftman[mb]];
+
+	int ca = (fa->makingTime ? fa->price / fa->makingTime : 0) * (fa->requestTime + fa->waitingTime - currentTime);
+	int cb = (fb->makingTime ? fb->price / fb->makingTime : 0) * (fb->requestTime + fb->waitingTime - currentTime);
+
+	return ca > cb;
+}
+
+void craftmanSort(int start, int end) {
+	if (start >= end) {
+		return;
+	}
+
+	int left = start;
+	int right = end;
+	int pivot = left;
+	int tmp;
+
+	while (left <= right) {
+		while (left <= end && !pwork_comp(left, pivot)) {
+			left++;
+		}
+		while (right > start && pwork_comp(right, pivot)) {
+			right--;
+		}
+
+		if (left > right) {
+			tmp = pcraftman[right];
+			pcraftman[right] = pcraftman[pivot];
+			pcraftman[pivot] = tmp;
+		}
+		else {
+			tmp = pcraftman[left];
+			pcraftman[left] = pcraftman[right];
+			pcraftman[right] = tmp;
+		}
+	}
+
+	craftmanSort(start, right - 1);
+	craftmanSort(right + 1, end);
+}
+
 void init(int N) {
-	//printf("%d\n", COUNT++);
 	craftsman_count = N;
 	restman = craftsman_count;
-	working.reset();
 	stock.reset();
 
 	for (int i = 0; i < craftsman_count; i++) {
@@ -130,7 +167,7 @@ void request(int furnitureID, int requestTime, int price, int makingTime, int wa
 	//sleep(2000);
 }
 
-#define TIMEOUTED(fid) ((furnitures[fid].requestTime + furnitures[fid].waitingTime) < (currentTime + furnitures[fid].makingTime))
+#define TIMEOUTED(fid) ((furnitures[fid].requestTime + furnitures[fid].waitingTime) <= (currentTime + furnitures[fid].makingTime))
 
 inline void startMakingEx(int mid, int fid) {
 	if (craftman[mid] == -1) restman--;
@@ -138,12 +175,26 @@ inline void startMakingEx(int mid, int fid) {
 	startMaking(mid + 1, fid);
 }
 
+/*
+#include <time.h>
+
+void sleep(int ms) {
+	clock_t goal = ms + clock();
+	while (goal > clock());
+}
+*/
 
 void tick(int t) {
 	currentTime = t;
 	int fid;
 
 	for (int i = 0; i < craftsman_count; i++) {
+		pcraftman[i] = i;
+	}
+	craftmanSort(0, craftsman_count - 1);
+
+	for (int m = 0; m < craftsman_count; m++) {
+		int i = pcraftman[m];
 		if (craftman[i] == -1) {
 			if (stock.pop(fid) && !TIMEOUTED(fid)) {
 				startMakingEx(i, fid);
@@ -169,9 +220,11 @@ void tick(int t) {
 				*/
 			}
 			else if (furnitures[fid].makingTime > 0 && restman == 0) {
+				int tmp = fid;
 				if (!stock.empty() && stock_comp(stock.data[0], fid)) {
 					stock.pop(fid);
 					if (!TIMEOUTED(fid)) {
+						//printf("[%d] changed %d(%d) > %d(%d)\n", currentTime, fid, WORK_WEIGHT(fid), tmp, WORK_WEIGHT(tmp));
 						startMakingEx(i, fid);
 					}
 					/*
