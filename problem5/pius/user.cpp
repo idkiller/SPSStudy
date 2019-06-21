@@ -7,17 +7,23 @@
 #define MAX_FAMILY_TREE_LENGTH 30000
 #define MAX_NAME_LENGTH 12
 
+#define MAX_PEOPLE_COUNT 400
+
 struct Person {
 	bool married;
 	int name_length;
 	char name[MAX_NAME_LENGTH];
+	long long name_serial;
 	int length;
 	char best_friend[MAX_NAME_LENGTH];
 	Person* parent;
-	Person* children[199];
+	Person* nextSibling;
+	Person* prevSibling;
+	Person* firstChild;
+	Person* lastChild;
 };
 
-static Person people[200];
+static Person people[MAX_PEOPLE_COUNT];
 static int people_count = 0;
 static Person *tree_root;
 
@@ -27,16 +33,6 @@ int strlen(const char *str) {
 	return count - 1;
 }
 
-bool streq(const char *a, int a_size, const char *b, int b_size) {
-	if (a_size != b_size) return false;
-	for (int i = 0; i < a_size; i++) {
-		if (a[i] != b[i]) {
-			return false;
-		}
-	}
-	return true;
-}
-
 void strcpy(char dest[MAX_NAME_LENGTH], char *src, int size) {
 	for (int i = 0; i < size; i++) {
 		dest[i] = src[i];
@@ -44,16 +40,24 @@ void strcpy(char dest[MAX_NAME_LENGTH], char *src, int size) {
 	dest[size] = '\0';
 }
 
+long long serialize_name(const char str[MAX_NAME_LENGTH], int size) {
+	long long serial = 0;
+	for (int i = 0; i < size; i++) {
+		serial = (serial << 5) | (str[i] - 'A' + 1);
+	}
+	return serial;
+}
+
 unsigned int hashfunc(const char str[MAX_NAME_LENGTH], int size) {
 	unsigned int hash = 5381;
 	for (int i = 0; i < size; i++) {
 		hash += (hash << 5) + str[i];
 	}
-	return hash % 200;
+	return hash % MAX_PEOPLE_COUNT;
 }
 
 void ht_init() {
-	for (int i = 0; i < 200; i++) {
+	for (int i = 0; i < MAX_PEOPLE_COUNT; i++) {
 		people[i].name_length = -1;
 	}
 }
@@ -62,16 +66,17 @@ Person* ht_set(Person &person) {
 	int hash = hashfunc(person.name, person.name_length);
 	while (people[hash].name_length != -1) {
 		hash++;
-		if (hash == 200) hash = 0;
+		if (hash == MAX_PEOPLE_COUNT) hash = 0;
 	}
 	people[hash] = person;
 	return &people[hash];
 }
 Person* ht_get(const char* name, int size) {
 	int hash = hashfunc(name, size);
-	while (people[hash].name_length < 0 || !streq(people[hash].name, people[hash].name_length, name, size)) {
+	long long serial = serialize_name(name, size);
+	while (people[hash].name_length < 0 || people[hash].name_serial != serial) {
 		hash++;
-		if (hash == 200) hash = 0;
+		if (hash == MAX_PEOPLE_COUNT) hash = 0;
 	}
 	return &people[hash];
 }
@@ -81,10 +86,12 @@ static const char* spaces = "                                                   
 void printTree(Person *person, int depth) {
 	Person *parent = person->parent;
 	printf("%.*s \"%.*s\"%s ", depth * 4, spaces, person->name_length, person->name, person->married ? "/M" : "");
+	Person *child = person->firstChild;
 	if (person->married) {
 		printf("[%d]\n", person->length);
-		for (int i = 0; i < person->length; i++) {
-			printTree(person->children[i], depth + 1);
+		while (child != nullptr) {
+			printTree(child, depth + 1);
+			child = child->nextSibling;
 		}
 	}
 	else {
@@ -126,17 +133,26 @@ Person* parsePerson(char data[MAX_FAMILY_TREE_LENGTH], int start, int size, int 
 	offset++;
 	person.name_length = data[start + offset++];
 	strcpy(person.name, &data[start + offset], person.name_length);
+	person.name_serial = serialize_name(person.name, person.name_length);
 	offset += person.name_length + 1;
 	person.length = data[start + offset++];
+	person.nextSibling = person.prevSibling = person.firstChild = person.lastChild = nullptr;
 
 	Person *who = ht_set(person);
+	Person *child = nullptr;
 
-	if (person.married) {
-		for (int i = 0; i < person.length; i++) {
-			int child_consumed = 0;
-			who->children[i] = parsePerson(data, start + offset, size - offset, &child_consumed, depth + 1, who);
+	if (person.married && person.length > 0) {
+		int child_consumed = 0;
+		who->firstChild = parsePerson(data, start + offset, size - offset, &child_consumed, depth + 1, who);
+		child = who->firstChild;
+		offset += child_consumed;
+		for (int i = 1; i < person.length; i++) {
+			child->nextSibling = parsePerson(data, start + offset, size - offset, &child_consumed, depth + 1, who);
+			child->nextSibling->prevSibling = child;
+			child = child->nextSibling;
 			offset += child_consumed;
 		}
+		who->lastChild = child;
 	}
 	else {
 		strcpy(who->best_friend, &data[start + offset], person.length);
@@ -148,9 +164,11 @@ Person* parsePerson(char data[MAX_FAMILY_TREE_LENGTH], int start, int size, int 
 
 void removeTree(Person* root) {
 	root->name_length = -1;
-	if (root->married) {
-		for (int i = 0; i < root->length; i++) {
-			removeTree(root->children[i]);
+	Person *child = root->firstChild;
+	if (child != nullptr) {
+		while (child != nullptr) {
+			removeTree(child);
+			child = child->nextSibling;
 		}
 	}
 }
@@ -165,9 +183,13 @@ int dumpTree(Person* root, char *data) {
 	offset += root->name_length;
 	data[offset++] = 0;
 	data[offset++] = root->length;
+
+
 	if (root->married) {
-		for (int i = 0; i < root->length; i++) {
-			offset += dumpTree(root->children[i], &data[offset]);
+		Person *child = root->firstChild;
+		while (child != nullptr) {
+			offset += dumpTree(child, &data[offset]);
+			child = child->nextSibling;
 		}
 	}
 	else {
@@ -214,9 +236,16 @@ void registeration(char parent[MAX_NAME_LENGTH], char child[MAX_NAME_LENGTH], ch
 	person.married = false;
 	person.name_length = strlen(child);
 	strcpy(person.name, child, person.name_length);
+	person.name_serial = serialize_name(person.name, person.name_length);
 	person.length = strlen(childBfName);
 	strcpy(person.best_friend, childBfName, person.length);
-	who->children[who->length++] = ht_set(person);
+	person.nextSibling = person.prevSibling = person.firstChild = person.lastChild = nullptr;
+	Person *last = who->lastChild;
+	last->nextSibling = ht_set(person);
+	who->lastChild = last->nextSibling;
+	who->lastChild->prevSibling = last;
+	who->length++;
+
 
 #ifdef MYDEBUG
 	printf("registration to %.*s / %.*s - %.*s\n", strlen(parent), parent, strlen(child), child, strlen(childBfName), childBfName);
@@ -227,18 +256,16 @@ void registeration(char parent[MAX_NAME_LENGTH], char child[MAX_NAME_LENGTH], ch
 
 void remove(char name[MAX_NAME_LENGTH]) {
 	Person *who = ht_get(name, strlen(name));
-	Person *parent = who->parent;
-	int pos = 200;
-	for (int i = 0; i < parent->length - 1; i++) {
-		if (parent->children[i] == who) {
-			pos = i;
-		}
-		if (pos <= i) {
-			parent->children[i] = parent->children[i + 1];
-		}
+	if (who->nextSibling == nullptr) {
+		who->parent->lastChild = who->prevSibling;
 	}
-	parent->length--;
-	parent->children[parent->length] = nullptr;
+	if (who->prevSibling == nullptr) {
+		who->parent->firstChild = who->nextSibling;
+	}
+	else {
+		who->prevSibling->nextSibling = who->nextSibling;
+	}
+	who->parent->length--;
 	removeTree(who);
 
 #ifdef MYDEBUG
