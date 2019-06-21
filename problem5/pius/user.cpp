@@ -7,7 +7,7 @@
 #define MAX_FAMILY_TREE_LENGTH 30000
 #define MAX_NAME_LENGTH 12
 
-#define MAX_PEOPLE_COUNT 400
+#define MAX_PEOPLE_COUNT 407
 
 struct Person {
 	bool married;
@@ -27,20 +27,20 @@ static Person people[MAX_PEOPLE_COUNT];
 static int people_count = 0;
 static Person *tree_root;
 
-int strlen(const char *str) {
+inline int strlen(const char *str) {
 	int count = 0;
 	while (str[count++] != '\0');
 	return count - 1;
 }
 
-void strcpy(char dest[MAX_NAME_LENGTH], char *src, int size) {
+inline void strcpy(char dest[MAX_NAME_LENGTH], char *src, int size) {
 	for (int i = 0; i < size; i++) {
 		dest[i] = src[i];
 	}
 	dest[size] = '\0';
 }
 
-long long serialize_name(const char str[MAX_NAME_LENGTH], int size) {
+inline long long serialize_name(const char str[MAX_NAME_LENGTH], int size) {
 	long long serial = 0;
 	for (int i = 0; i < size; i++) {
 		serial = (serial << 5) | (str[i] - 'A' + 1);
@@ -48,22 +48,14 @@ long long serialize_name(const char str[MAX_NAME_LENGTH], int size) {
 	return serial;
 }
 
-unsigned int hashfunc(const char str[MAX_NAME_LENGTH], int size) {
-	unsigned int hash = 5381;
-	for (int i = 0; i < size; i++) {
-		hash += (hash << 5) + str[i];
-	}
-	return hash % MAX_PEOPLE_COUNT;
-}
-
-void ht_init() {
+inline void ht_init() {
 	for (int i = 0; i < MAX_PEOPLE_COUNT; i++) {
 		people[i].name_length = -1;
 	}
 }
 
-Person* ht_set(Person &person) {
-	int hash = hashfunc(person.name, person.name_length);
+inline Person* ht_set(Person &person) {
+	unsigned int hash = person.name_serial % MAX_PEOPLE_COUNT;
 	while (people[hash].name_length != -1) {
 		hash++;
 		if (hash == MAX_PEOPLE_COUNT) hash = 0;
@@ -71,9 +63,9 @@ Person* ht_set(Person &person) {
 	people[hash] = person;
 	return &people[hash];
 }
-Person* ht_get(const char* name, int size) {
-	int hash = hashfunc(name, size);
+inline Person* ht_get(const char* name, int size) {
 	long long serial = serialize_name(name, size);
+	unsigned int hash = serial % MAX_PEOPLE_COUNT;
 	while (people[hash].name_length < 0 || people[hash].name_serial != serial) {
 		hash++;
 		if (hash == MAX_PEOPLE_COUNT) hash = 0;
@@ -164,6 +156,7 @@ Person* parsePerson(char data[MAX_FAMILY_TREE_LENGTH], int start, int size, int 
 
 void removeTree(Person* root) {
 	root->name_length = -1;
+	/*
 	Person *child = root->firstChild;
 	if (child != nullptr) {
 		while (child != nullptr) {
@@ -171,6 +164,7 @@ void removeTree(Person* root) {
 			child = child->nextSibling;
 		}
 	}
+	*/
 }
 
 int dumpTree(Person* root, char *data) {
