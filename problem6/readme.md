@@ -23,7 +23,7 @@
 
  - shape: W(4), H(4)
 
-![pic1](./problem6/pic1.png)
+![pic1](./pic1.png)
 
 
 그림을 보면 컨테이너 4개(1~4)를 X 표시의 모양이 되도록 이동시켜야 한다.
@@ -40,7 +40,7 @@
 
 두 번째 명령: 컨테이너 1(RIGHT), 2(HOLD), 3(HOLD), 4(HOLD)
 
-![pic2](./problem6/pic2.png)
+![pic2](./pic2.png)
 
 
 
@@ -63,7 +63,7 @@
 
 두 번째 명령: 컨테이너 1(HOLD), 2(HOLD), 3(HOLD), 4(UP)
 
-![pic3](./problem6/pic3.png)
+![pic3](./pic3.png)
 
 
 
